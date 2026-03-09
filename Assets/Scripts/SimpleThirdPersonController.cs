@@ -104,7 +104,7 @@ public class SimpleThirdPersonController : NetworkBehaviour
             
             // Auto Teleport to Safe Spot on Spawn
             // Because default (0,0,0) is in the void
-            Vector3 safePos = new Vector3(167f, 22f, 400f);
+            Vector3 safePos = new Vector3(82f, 15f, -50f);
             if (_characterController != null) _characterController.enabled = false;
             transform.position = safePos;
             if (_characterController != null) _characterController.enabled = true;
@@ -356,7 +356,7 @@ public class SimpleThirdPersonController : NetworkBehaviour
         if (GUILayout.Button("传送回地面 (Teleport)"))
         {
             // Teleport to user specified safe spot
-            Vector3 safePos = new Vector3(167f, 22f, 400f);
+            Vector3 safePos = new Vector3(82f, 15f, -50f);
             
             if (_characterController != null) _characterController.enabled = false;
             transform.position = safePos;

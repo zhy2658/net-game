@@ -16,20 +16,24 @@ public class NightmareSceneSetup : EditorWindow
     [MenuItem("TraeTools/Setup Nightmare Scene")]
     public static void SetupScene()
     {
-        // 1. Scene Management - Try to find the correct scene
-        string targetScenePath = "Assets/Scenes/NightmareScene.unity";
-        if (!System.IO.File.Exists(targetScenePath))
-        {
-             targetScenePath = "Assets/Flooded_Grounds/Scenes/Scene_A.unity";
-        }
-
+        // 1. Scene Management - Use the SimpleNaturePack Demo Scene
+        string targetScenePath = "Assets/SimpleNaturePack/Scenes/SimpleNaturePack_Demo.unity";
+        
         if (EditorSceneManager.GetActiveScene().path != targetScenePath)
         {
-            if (EditorUtility.DisplayDialog("Switch Scene", $"Open {System.IO.Path.GetFileName(targetScenePath)} to proceed?", "Yes", "No"))
+            if (System.IO.File.Exists(targetScenePath))
             {
-                EditorSceneManager.OpenScene(targetScenePath);
+                if (EditorUtility.DisplayDialog("Switch Scene", $"Open {System.IO.Path.GetFileName(targetScenePath)} to proceed?", "Yes", "No"))
+                {
+                    EditorSceneManager.OpenScene(targetScenePath);
+                }
+                else return;
             }
-            else return;
+            else
+            {
+                Debug.LogError($"Could not find target scene: {targetScenePath}");
+                return;
+            }
         }
 
         // 2. Fix Materials
@@ -51,6 +55,9 @@ public class NightmareSceneSetup : EditorWindow
         RenderSettings.ambientIntensity = 0.2f;
         RenderSettings.reflectionIntensity = 0.2f;
 
+        // 4.1 Resize World (Make SimpleNaturePack Bigger)
+        ResizeWorld();
+
         // 5. Instantiate Player (Casual1 Anime Girl)
         GameObject playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AnimeGirls/Casual1/Casual1.prefab");
         if (playerPrefab != null)
@@ -58,58 +65,43 @@ public class NightmareSceneSetup : EditorWindow
             GameObject player = (GameObject)PrefabUtility.InstantiatePrefab(playerPrefab);
             player.name = "Player_Casual1";
             
-            // Set Position - Pick a dramatic start point
-            Vector3 spawnPos = new Vector3(0, 10f, 0); // Default fallback
+            // Set Position - Default for SimpleNaturePack (Scaled x20)
+            Vector3 spawnPos = new Vector3(82f, 15f, -50f); 
             bool foundSpot = false;
 
-            string[] landmarks = new string[] { "BLD_Bridge_A", "Bridge", "Villa", "House", "Dock" };
+            // Try to find a good spawn point (Disabled for manual override)
+            /* 
+            string[] landmarks = new string[] { "Ground_01", "Ground", "Terrain" };
             foreach (string mark in landmarks)
             {
                 GameObject obj = GameObject.Find(mark);
-                if (obj == null)
-                {
-                    var allObjs = GameObject.FindObjectsOfType<GameObject>();
-                    foreach(var o in allObjs)
-                    {
-                        if (o.name.Contains(mark))
-                        {
-                            obj = o;
-                            break;
-                        }
-                    }
-                }
-
                 if (obj != null)
                 {
                     Renderer r = obj.GetComponentInChildren<Renderer>();
                     if (r != null)
                     {
-                        Vector3 center = r.bounds.center;
-                        float topY = r.bounds.max.y;
-                        if (Physics.Raycast(new Vector3(center.x, topY + 5f, center.z), Vector3.down, out RaycastHit hit, 20f))
-                        {
-                            spawnPos = hit.point;
-                            foundSpot = true;
-                            Debug.Log($"Spawn point set to: {obj.name} at {spawnPos}");
-                            break;
-                        }
+                        spawnPos = r.bounds.center + Vector3.up * 2f;
+                        foundSpot = true;
+                        break;
                     }
                 }
             }
-            
+            */
+
+            // Raycast check to ensure we don't spawn in void
+            if (Physics.Raycast(spawnPos + Vector3.up * 20f, Vector3.down, out RaycastHit hit, 50f))
+            {
+                spawnPos = hit.point + Vector3.up * 1f;
+                foundSpot = true;
+            }
+
             if (!foundSpot)
             {
-                if (Physics.Raycast(new Vector3(0, 50, 0), Vector3.down, out RaycastHit hit, 100f))
-                {
-                    spawnPos = hit.point;
-                }
+                Debug.LogWarning("Could not find ground at default spawn pos. Using raw coordinates.");
             }
             
-            // Move player forward 2m and UP 2m to prevent sticking in ground
-            spawnPos += Vector3.forward * 2.0f + Vector3.up * 2.0f;
-            
             player.transform.position = spawnPos;
-            player.transform.rotation = Quaternion.identity;
+            player.transform.rotation = Quaternion.Euler(0, 180, 0);
             
             // Fix Player Materials (URP)
             Renderer[] charRenderers = player.GetComponentsInChildren<Renderer>();
@@ -266,8 +258,8 @@ public class NightmareSceneSetup : EditorWindow
             // Ensure Avatar (Try to load from idle.fbx if Casual1 fails)
             if (anim.avatar == null || !anim.avatar.isValid)
             {
-                 Avatar mixamoAvatar = AssetDatabase.LoadAssetAtPath<Avatar>("Assets/Animations/player/idle.fbx");
-                 if (mixamoAvatar != null) anim.avatar = mixamoAvatar;
+                 Avatar fallbackAvatar = AssetDatabase.LoadAssetAtPath<Avatar>("Assets/Animations/player/idle.fbx");
+                 if (fallbackAvatar != null) anim.avatar = fallbackAvatar;
             }
 
             // Setup Attack Script
@@ -323,10 +315,10 @@ public class NightmareSceneSetup : EditorWindow
                 
                 Vector3 knifePos = player.transform.position + spawnForward * 2.0f + Vector3.up * 1.0f;
                 
-                if (Physics.Raycast(knifePos + Vector3.up * 50.0f, Vector3.down, out RaycastHit hit, 100f, ~0, QueryTriggerInteraction.Ignore))
+                if (Physics.Raycast(knifePos + Vector3.up * 50.0f, Vector3.down, out RaycastHit knifeHit, 100f, ~0, QueryTriggerInteraction.Ignore))
                 {
-                    pickupKnife.transform.position = hit.point + Vector3.up * 0.1f;
-                    pickupKnife.transform.rotation = Quaternion.FromToRotation(Vector3.up, hit.normal) * Quaternion.Euler(90, 0, 0);
+                    pickupKnife.transform.position = knifeHit.point + Vector3.up * 0.1f;
+                    pickupKnife.transform.rotation = Quaternion.FromToRotation(Vector3.up, knifeHit.normal) * Quaternion.Euler(90, 0, 0);
                 }
                 else
                 {
@@ -369,9 +361,9 @@ public class NightmareSceneSetup : EditorWindow
                 
                 Vector3 enemyPos = player.transform.position + spawnForward * 10.0f;
                 
-                if (Physics.Raycast(enemyPos + Vector3.up * 50f, Vector3.down, out RaycastHit hit, 100f, ~0, QueryTriggerInteraction.Ignore))
+                if (Physics.Raycast(enemyPos + Vector3.up * 50f, Vector3.down, out RaycastHit enemyHit, 100f, ~0, QueryTriggerInteraction.Ignore))
                 {
-                    enemy.transform.position = hit.point;
+                    enemy.transform.position = enemyHit.point;
                 }
                 else
                 {
@@ -659,11 +651,11 @@ public class NightmareSceneSetup : EditorWindow
         if (mat.shader.name == "Universal Render Pipeline/Lit") return false;
 
         string shaderName = mat.shader.name;
-        bool isNature = shaderName.Contains("Nature") || shaderName.Contains("Tree") || shaderName.Contains("Vegetation") || shaderName.Contains("Leaves") || shaderName.Contains("Bark");
+        // Check for Low-Poly Nature pack keywords
+        bool isNature = shaderName.Contains("Nature") || shaderName.Contains("Tree") || shaderName.Contains("Vegetation") || shaderName.Contains("Leaves") || shaderName.Contains("Bark") || mat.name.Contains("Leaf") || mat.name.Contains("Grass");
         bool isStandard = shaderName == "Standard" || shaderName.Contains("Diffuse") || shaderName.Contains("Bumped");
-        bool isFG = shaderName.StartsWith("FG_") || shaderName.Contains("Flooded_Grounds");
         
-        if (isStandard || isFG || isNature || shaderName == "Hidden/InternalErrorShader" || shaderName.Contains("SpeedTree") || shaderName.Contains("Legacy Shaders") || mat.name.Contains("Knife")) 
+        if (isStandard || isNature || shaderName == "Hidden/InternalErrorShader" || shaderName.Contains("SpeedTree") || shaderName.Contains("Legacy Shaders") || mat.name.Contains("Knife")) 
         {
             Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
             if (urpLit == null) return false;
@@ -872,6 +864,8 @@ public class NightmareSceneSetup : EditorWindow
     private static void CreateSpawnerScript(Vector3 spawnPos)
     {
         string path = "Assets/Scripts/NetworkPlayerSpawner.cs";
+        // Force update the spawn position in the script content
+        // Note: The spawnPos passed to this function is already updated (82, 15, -50)
         string content = @"using UnityEngine;
 using Unity.Netcode;
 
@@ -912,16 +906,14 @@ public class NetworkPlayerSpawner : NetworkBehaviour
         }
         base.OnDestroy();
     }
-}";
-        if (!System.IO.File.Exists(path))
-        {
-             // Check directory
-             string dir = System.IO.Path.GetDirectoryName(path);
-             if (!System.IO.Directory.Exists(dir)) System.IO.Directory.CreateDirectory(dir);
+}
+";
+        // Always overwrite to ensure updated coordinates
+        string dir = System.IO.Path.GetDirectoryName(path);
+        if (!System.IO.Directory.Exists(dir)) System.IO.Directory.CreateDirectory(dir);
              
-             System.IO.File.WriteAllText(path, content);
-             AssetDatabase.Refresh();
-        }
+        System.IO.File.WriteAllText(path, content);
+        AssetDatabase.Refresh();
     }
 
     private static GameObject CreateButton(Transform parent, string name, Vector2 pos, string text, Color color)
@@ -974,6 +966,43 @@ public class NetworkPlayerSpawner : NetworkBehaviour
         textRect.anchoredPosition = Vector2.zero; // Reset position to center of parent
         
         return btnObj;
+    }
+
+    private static void ResizeWorld()
+    {
+        GameObject worldRoot = GameObject.Find("WorldRoot");
+        if (worldRoot == null)
+        {
+            worldRoot = new GameObject("WorldRoot");
+            
+            // Get all root objects
+            var roots = UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects();
+            foreach (var r in roots)
+            {
+                // Ignore our system objects
+                if (r.name == "WorldRoot") continue;
+                if (r.name == "NetworkManager") continue;
+                if (r.name == "NetworkUI") continue;
+                if (r.name == "EventSystem") continue;
+                if (r.name == "Main Camera") continue;
+                if (r.name == "Directional Light") continue; 
+                if (r.name.Contains("Canvas")) continue;
+                if (r.name.Contains("Player")) continue;
+                
+                // Parent to WorldRoot
+                r.transform.SetParent(worldRoot.transform);
+            }
+            
+            // Scale up
+            worldRoot.transform.localScale = Vector3.one * 20f;
+            Debug.Log("World Resized x20");
+        }
+        else
+        {
+            // Already resized?
+            if (worldRoot.transform.localScale.x < 15f)
+                worldRoot.transform.localScale = Vector3.one * 20f;
+        }
     }
 
     private static void OptimizeGraphics()
