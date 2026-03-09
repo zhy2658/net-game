@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package protocol;
+
+// C# namespace
+option csharp_namespace = "Game.Protocol";
+// Go package
+option go_package = "./protocol";
+
+message JoinRequest {
+    string name = 1;
+}
+
+message JoinResponse {
+    int64 code = 1;
+    string message = 2;
+}
+
+message ChatMessage {
+    int64 senderId = 1;
+    string content = 2;
+}
+
+message MoveUpdate {
+    float x = 1;
+    float y = 2;
+    float z = 3;
+}
