@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "VTbeudZu2Vg=",
+  "success": true,
+  "projectFilePath": "D:\\user\\note\\unity3d\\project\\3dtest\\TestKcpClient\\TestKcpClient.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\user\\.nuget\\packages\\google.protobuf\\3.34.0\\google.protobuf.3.34.0.nupkg.sha512"
+  ],
+  "logs": []
+}

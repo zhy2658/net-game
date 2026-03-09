@@ -3,7 +3,7 @@ using Unity.Netcode;
 
 public class NetworkPlayerSpawner : NetworkBehaviour
 {
-    public Vector3 spawnPosition = new Vector3(566f, 33.77893f, 464.0191f);
+    public Vector3 spawnPosition = new Vector3(82f, 10.86234f, -50f);
 
     public override void OnNetworkSpawn()
     {

@@ -34,6 +34,11 @@ public class SimpleThirdPersonController : NetworkBehaviour
     private float _rotationVelocity;
     private bool _isGrounded;
 
+    // Network Sync
+    private NanoKcpClient _kcpClient;
+    private float _lastSyncTime;
+    private const float SYNC_INTERVAL = 0.05f; // 20 times per second
+
     void Awake()
     {
         _characterController = GetComponent<CharacterController>();
@@ -43,6 +48,9 @@ public class SimpleThirdPersonController : NetworkBehaviour
         // Find main camera
         if (Camera.main != null) _cameraTransform = Camera.main.transform;
         
+        // Find KCP Client
+        _kcpClient = FindObjectOfType<NanoKcpClient>();
+
         // Initialize Input System
         inputMap = new InputActionMap("ThirdPersonController");
         
@@ -72,6 +80,9 @@ public class SimpleThirdPersonController : NetworkBehaviour
             Debug.LogWarning("Time.timeScale was 0! Forcing to 1.");
             Time.timeScale = 1f;
         }
+        
+        // Find KCP Client (if not found in Awake)
+        if (_kcpClient == null) _kcpClient = FindObjectOfType<NanoKcpClient>();
 
         // Allow offline testing: if NetworkManager is not running, enable input
         bool isOffline = NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening;
@@ -94,11 +105,13 @@ public class SimpleThirdPersonController : NetworkBehaviour
         if (IsOwner)
         {
             // Lock and Hide Cursor (Only if not on Mobile)
-            if (!Application.isMobilePlatform)
-            {
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
-            }
+            // if (!Application.isMobilePlatform)
+            // {
+            //     Cursor.lockState = CursorLockMode.Locked;
+            //     Cursor.visible = false;
+            // }
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
             
             inputMap.Enable();
             
@@ -261,6 +274,24 @@ public class SimpleThirdPersonController : NetworkBehaviour
                 _characterController.Move(move * Time.deltaTime);
             }
             
+            // Sync to Server
+            if (_kcpClient != null && _kcpClient.IsConnected && Time.time - _lastSyncTime > SYNC_INTERVAL)
+            {
+                _lastSyncTime = Time.time;
+                var moveMsg = new Protocol.MoveRequest
+                {
+                    Position = new Protocol.Vector3 { X = transform.position.x, Y = transform.position.y, Z = transform.position.z },
+                    Rotation = new Protocol.Quaternion { X = transform.rotation.x, Y = transform.rotation.y, Z = transform.rotation.z, W = transform.rotation.w }
+                };
+                // Use Notify for movement to reduce overhead (no response needed)
+                _kcpClient.SendNotify("room.move", moveMsg);
+                if (Time.frameCount % 60 == 0) Debug.Log($"Sending Move: {transform.position}");
+            }
+            else if (_kcpClient != null && !_kcpClient.IsConnected && Time.frameCount % 120 == 0)
+            {
+                Debug.LogWarning("KCP Client not connected yet...");
+            }
+
             // Debug: Force Move Up with K
             #if ENABLE_INPUT_SYSTEM
             if (Keyboard.current.kKey.isPressed)

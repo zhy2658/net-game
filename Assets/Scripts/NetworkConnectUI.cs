@@ -36,13 +36,13 @@ public class NetworkConnectUI : MonoBehaviour
             });
         }
         
-        // Ensure NanoClient exists
-        if (FindObjectOfType<NanoClient>() == null)
+        // Ensure NanoKcpClient exists
+        if (FindObjectOfType<NanoKcpClient>() == null)
         {
-            GameObject nanoObj = new GameObject("NanoClient");
-            if (System.Type.GetType("NanoClient") != null)
+            GameObject nanoObj = new GameObject("NanoKcpClient");
+            if (System.Type.GetType("NanoKcpClient") != null)
             {
-                 nanoObj.AddComponent(System.Type.GetType("NanoClient"));
+                 nanoObj.AddComponent(System.Type.GetType("NanoKcpClient"));
             }
         }
     }

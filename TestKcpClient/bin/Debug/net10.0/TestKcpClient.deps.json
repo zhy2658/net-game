@@ -1,0 +1,41 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "TestKcpClient/1.0.0": {
+        "dependencies": {
+          "Google.Protobuf": "3.34.0"
+        },
+        "runtime": {
+          "TestKcpClient.dll": {}
+        }
+      },
+      "Google.Protobuf/3.34.0": {
+        "runtime": {
+          "lib/net5.0/Google.Protobuf.dll": {
+            "assemblyVersion": "3.34.0.0",
+            "fileVersion": "3.34.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "TestKcpClient/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Google.Protobuf/3.34.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-a5US9akiNczS5kC7qBqYqJmnxHVQDITZD6GRRbwGHk/oa17EwOGE3PHIWFVeHTqCctq8mVjLSelwsxCkYYBinA==",
+      "path": "google.protobuf/3.34.0",
+      "hashPath": "google.protobuf.3.34.0.nupkg.sha512"
+    }
+  }
+}
