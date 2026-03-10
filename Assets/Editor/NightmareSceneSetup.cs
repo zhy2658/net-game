@@ -4,12 +4,9 @@ using UnityEditor.SceneManagement;
 using UnityEngine.Rendering;
 using System.Collections.Generic;
 using UnityEngine.EventSystems;
-using UnityEngine.UI; // For UI creation
-using Unity.Netcode;
-using Unity.Netcode.Components;
-using Unity.Netcode.Transports.UTP;
-using UnityEngine.Rendering.Universal; // For URP Settings
-using UnityEditor.Animations; // Required for AnimatorController
+using UnityEngine.UI;
+using UnityEngine.Rendering.Universal;
+using UnityEditor.Animations;
 
 public class NightmareSceneSetup : EditorWindow
 {
@@ -722,29 +719,7 @@ public class NightmareSceneSetup : EditorWindow
 
     private static void SetupNetwork(GameObject player, Vector3 spawnPos)
     {
-        // Add Network Components to Player
-        if (player.GetComponent<NetworkObject>() == null)
-            player.AddComponent<NetworkObject>();
-            
-        // Use ClientNetworkTransform for client-authoritative movement
-        // We use Reflection to find it since we just created the file
-        System.Type clientTransformType = System.Type.GetType("Unity.Multiplayer.Samples.Utilities.ClientAuthority.ClientNetworkTransform, Assembly-CSharp");
-        if (clientTransformType == null) clientTransformType = System.Type.GetType("Unity.Multiplayer.Samples.Utilities.ClientAuthority.ClientNetworkTransform");
-        
-        if (clientTransformType != null)
-        {
-            if (player.GetComponent(clientTransformType) == null)
-                player.AddComponent(clientTransformType);
-        }
-        else
-        {
-            // Fallback to standard NetworkTransform if custom script not found yet
-            if (player.GetComponent<NetworkTransform>() == null)
-                player.AddComponent<NetworkTransform>();
-            Debug.LogWarning("ClientNetworkTransform not found! Using standard NetworkTransform (might cause movement jitter if not server auth).");
-        }
-
-        // Create Prefab
+        // Create Prefab (KCP-only, no Netcode components)
         string prefabDir = "Assets/Prefabs";
         if (!System.IO.Directory.Exists(prefabDir))
             System.IO.Directory.CreateDirectory(prefabDir);
@@ -752,63 +727,6 @@ public class NightmareSceneSetup : EditorWindow
         string prefabPath = prefabDir + "/NetworkPlayer.prefab";
         GameObject playerPrefab = PrefabUtility.SaveAsPrefabAsset(player, prefabPath);
         Debug.Log($"Created Network Player Prefab at: {prefabPath}");
-        
-        // Destroy Scene Instance (NetworkManager will spawn it)
-        Object.DestroyImmediate(player);
-
-        // Setup NetworkManager
-        GameObject netManagerObj = GameObject.Find("NetworkManager");
-        if (netManagerObj != null) Object.DestroyImmediate(netManagerObj);
-        
-        netManagerObj = new GameObject("NetworkManager");
-        NetworkManager netManager = netManagerObj.AddComponent<NetworkManager>();
-        
-        // Add Transport
-        UnityTransport transport = netManagerObj.AddComponent<UnityTransport>();
-        // netManager.NetworkConfig.NetworkTransport = transport; // Set via SerializedObject below
-
-        // Use SerializedObject to set NetworkConfig properties
-        SerializedObject so = new SerializedObject(netManager);
-        SerializedProperty networkConfig = so.FindProperty("NetworkConfig");
-        if (networkConfig != null)
-        {
-            // Set Player Prefab
-            SerializedProperty playerPrefabProp = networkConfig.FindPropertyRelative("PlayerPrefab");
-            if (playerPrefabProp != null)
-                playerPrefabProp.objectReferenceValue = playerPrefab;
-                
-            // Set NetworkTransport (Important: UnityTransport must be assigned!)
-            // Note: In newer Netcode versions, this is a serialized field on NetworkManager itself or inside config.
-            // We can try to set the NetworkTransport field directly if it exists.
-            SerializedProperty transportProp = networkConfig.FindPropertyRelative("NetworkTransport");
-            if (transportProp != null)
-                transportProp.objectReferenceValue = transport;
-        }
-        so.ApplyModifiedProperties();
-        
-        // Ensure UnityTransport is assigned via Reflection as a fallback (some versions need this)
-        try 
-        {
-            netManager.NetworkConfig.NetworkTransport = transport;
-        }
-        catch {}
-
-        // Set Position to Spawn Point if possible
-        // Note: NetworkManager spawns player at (0,0,0) by default or random points if configured.
-        // We can't easily change default spawn pos without a custom NetworkManager script or a spawner.
-        // But we can create a simple spawner script.
-        
-        GameObject spawnerObj = GameObject.Find("PlayerSpawner");
-        if (spawnerObj != null) Object.DestroyImmediate(spawnerObj);
-        spawnerObj = new GameObject("PlayerSpawner");
-        // We will add a simple script via Reflection or just rely on manual move for now.
-        // Actually, let's create a simple NetworkSpawner script to handle positioning.
-        
-        CreateSpawnerScript(spawnPos);
-        if (System.Type.GetType("NetworkPlayerSpawner") != null)
-        {
-             spawnerObj.AddComponent(System.Type.GetType("NetworkPlayerSpawner"));
-        }
 
         // Create UI
         GameObject uiObj = GameObject.Find("NetworkUI");
@@ -817,21 +735,16 @@ public class NightmareSceneSetup : EditorWindow
         uiObj = new GameObject("NetworkUI");
         Canvas canvas = uiObj.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 999; // Ensure on top
+        canvas.sortingOrder = 999;
         CanvasScaler scaler = uiObj.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
         uiObj.AddComponent<GraphicRaycaster>();
-        
-        // Create NanoKcpClient Script (KCP/UDP)
-        CreateNanoKcpClientScript();
 
-        // Add NanoClient
+        // Add NanoKcpClient
         GameObject nanoObj = new GameObject("NanoClient");
         nanoObj.transform.SetParent(uiObj.transform);
         
-        // Use reflection to find NanoKcpClient
-        // Since we just created it, we might need to rely on next compile, but we try anyway
         System.Type clientType = System.Type.GetType("NanoKcpClient, Assembly-CSharp");
         if (clientType == null) clientType = System.Type.GetType("NanoKcpClient");
 
@@ -841,15 +754,14 @@ public class NightmareSceneSetup : EditorWindow
         }
         else
         {
-            Debug.LogWarning("NanoKcpClient script created. Please wait for compilation and run setup again if not attached.");
+            Debug.LogWarning("NanoKcpClient not found. Please wait for compilation and run setup again.");
         }
         
-        // Ensure EventSystem exists here for the Network UI
+        // Ensure EventSystem exists
         if (GameObject.FindObjectOfType<EventSystem>() == null)
         {
             GameObject esObj = new GameObject("EventSystem");
             esObj.AddComponent<EventSystem>();
-            // Try add new Input System module
             System.Type inputModuleType = System.Type.GetType("UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem");
             if (inputModuleType != null) esObj.AddComponent(inputModuleType);
             else esObj.AddComponent<StandaloneInputModule>();
@@ -857,77 +769,41 @@ public class NightmareSceneSetup : EditorWindow
 
         NetworkConnectUI uiScript = uiObj.AddComponent<NetworkConnectUI>();
         
-        // Create Buttons
-        GameObject hostBtn = CreateButton(uiObj.transform, "HostButton", new Vector2(-200, 0), "Host\n(创建房间)", Color.green);
-        GameObject clientBtn = CreateButton(uiObj.transform, "ClientButton", new Vector2(200, 0), "Client\n(加入房间)", Color.cyan);
+        GameObject hostBtn = CreateButton(uiObj.transform, "HostButton", new Vector2(-200, 0), "Connect\n(连接服务器)", Color.green);
+        GameObject clientBtn = CreateButton(uiObj.transform, "ClientButton", new Vector2(200, 0), "Join Room\n(加入房间)", Color.cyan);
         
-        // Assign to script
         SerializedObject uiSo = new SerializedObject(uiScript);
         uiSo.FindProperty("hostButton").objectReferenceValue = hostBtn.GetComponent<Button>();
         uiSo.FindProperty("clientButton").objectReferenceValue = clientBtn.GetComponent<Button>();
         uiSo.ApplyModifiedProperties();
-        
-        Debug.Log("Network Setup Complete.");
+
+        // Setup NetworkPlayerManager
+        GameObject npmObj = GameObject.Find("NetworkPlayerManager");
+        if (npmObj != null) Object.DestroyImmediate(npmObj);
+        npmObj = new GameObject("NetworkPlayerManager");
+
+        NanoKcpClient nanoKcpRef = nanoObj.GetComponent<NanoKcpClient>();
+
+        NetworkPlayerManager npm = npmObj.AddComponent<NetworkPlayerManager>();
+        npm.playerPrefab = playerPrefab;
+        npm.kcpClient = nanoKcpRef;
+        npm.roomId = "lobby";
+        npm.playerName = "UnityPlayer";
+        npm.autoJoinOnConnect = true;
+
+        Debug.Log("Network Setup Complete (KCP only).");
     }
     
-    private static void CreateSpawnerScript(Vector3 spawnPos)
-    {
-        string path = "Assets/Scripts/NetworkPlayerSpawner.cs";
-        // Force update the spawn position in the script content
-        // Note: The spawnPos passed to this function is already updated (82, 15, -50)
-        string content = @"using UnityEngine;
-using Unity.Netcode;
-
-public class NetworkPlayerSpawner : NetworkBehaviour
-{
-    public Vector3 spawnPosition = new Vector3(" + spawnPos.x + "f, " + spawnPos.y + "f, " + spawnPos.z + @"f);
-
-    public override void OnNetworkSpawn()
-    {
-        if (IsServer)
-        {
-            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
-        }
-    }
-
-    private void OnClientConnected(ulong clientId)
-    {
-        if (NetworkManager.Singleton.ConnectedClients.TryGetValue(clientId, out NetworkClient client))
-        {
-            var playerObject = client.PlayerObject;
-            if (playerObject != null)
-            {
-                var cc = playerObject.GetComponent<CharacterController>();
-                if (cc != null) cc.enabled = false;
-                
-                playerObject.transform.position = spawnPosition;
-                
-                if (cc != null) cc.enabled = true;
-            }
-        }
-    }
-    
-    public override void OnDestroy()
-    {
-        if (NetworkManager.Singleton != null)
-        {
-             NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
-        }
-        base.OnDestroy();
-    }
-}
-";
-        // Always overwrite to ensure updated coordinates
-        string dir = System.IO.Path.GetDirectoryName(path);
-        if (!System.IO.Directory.Exists(dir)) System.IO.Directory.CreateDirectory(dir);
-             
-        System.IO.File.WriteAllText(path, content);
-        AssetDatabase.Refresh();
-    }
-
     private static void CreateNanoKcpClientScript()
     {
         string path = "Assets/Scripts/NanoKcpClient.cs";
+        // If file exists, do NOT overwrite it, to preserve user changes (like RegisterHandler)
+        if (System.IO.File.Exists(path))
+        {
+            Debug.Log("NanoKcpClient.cs already exists. Skipping creation to preserve changes.");
+            return;
+        }
+
         string content = @"using System;
 using System.IO;
 using System.Text;

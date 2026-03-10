@@ -39,14 +39,13 @@ public class PlayerAttack : MonoBehaviour
 
     void Update()
     {
-        // DEBUG: Force Attack with Key 'K' to test logic
-        if (UnityEngine.InputSystem.Keyboard.current.kKey.wasPressedThisFrame)
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+        if (UnityEngine.InputSystem.Keyboard.current.jKey.wasPressedThisFrame)
         {
             PerformAttack();
         }
+#endif
 
-        // Check Input
-        // Fallback to legacy Input if Input System action fails
         bool inputTriggered = false;
         if (attackAction != null && attackAction.WasPressedThisFrame()) inputTriggered = true;
         if (UnityEngine.InputSystem.Mouse.current.leftButton.wasPressedThisFrame) inputTriggered = true;

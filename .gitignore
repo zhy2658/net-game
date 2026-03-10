@@ -7,6 +7,7 @@
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
 .utmp/
+/[Mm]emoryCaptures/
 
 # Visual Studio / VS Code / Rider
 .vs/
@@ -35,3 +36,17 @@ Desktop.ini
 *.unitypackage
 *.zip
 Server.zip
+
+# Archived / unused standalone test projects
+TestKcpClient/
+
+# Cursor IDE
+.cursor/mcp.json
+
+# Crash reports
+sysinfo.txt
+crashlytics-build.properties
+
+# Asset caches
+Assets/Plugins/kcp/bin/
+Assets/Plugins/kcp/obj/

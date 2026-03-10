@@ -1,5 +1,4 @@
 using UnityEngine;
-using Unity.Netcode;
 using UnityEngine.UI;
 
 public class NetworkConnectUI : MonoBehaviour
@@ -7,49 +6,54 @@ public class NetworkConnectUI : MonoBehaviour
     [SerializeField] private Button hostButton;
     [SerializeField] private Button clientButton;
 
+    [Header("KCP Connection")]
+    [SerializeField] private string kcpHost = "127.0.0.1";
+    [SerializeField] private int kcpPort = 3250;
+    [SerializeField] private string roomId = "lobby";
+
+    private NanoKcpClient _kcpClient;
+
     void Awake()
     {
-        // Auto-assign buttons if not set (looks for child buttons by name)
         if (hostButton == null) hostButton = transform.Find("HostButton")?.GetComponent<Button>();
         if (clientButton == null) clientButton = transform.Find("ClientButton")?.GetComponent<Button>();
     }
 
     void Start()
     {
-        // Force unlock cursor so we can click buttons
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
+        _kcpClient = FindFirstObjectByType<NanoKcpClient>();
+        if (_kcpClient == null)
+        {
+            GameObject nanoObj = new GameObject("NanoKcpClient");
+            _kcpClient = nanoObj.AddComponent<NanoKcpClient>();
+        }
+
         if (hostButton != null)
         {
-            hostButton.onClick.AddListener(() => {
-                NetworkManager.Singleton.StartHost();
-                HideUI();
-            });
+            hostButton.onClick.AddListener(ConnectKcp);
         }
 
         if (clientButton != null)
         {
-            clientButton.onClick.AddListener(() => {
-                NetworkManager.Singleton.StartClient();
-                HideUI();
-            });
+            clientButton.onClick.AddListener(ConnectKcp);
         }
-        
-        // Ensure NanoKcpClient exists
-        if (FindObjectOfType<NanoKcpClient>() == null)
-        {
-            GameObject nanoObj = new GameObject("NanoKcpClient");
-            if (System.Type.GetType("NanoKcpClient") != null)
-            {
-                 nanoObj.AddComponent(System.Type.GetType("NanoKcpClient"));
-            }
-        }
+    }
+
+    private void ConnectKcp()
+    {
+        if (_kcpClient == null) return;
+
+        _kcpClient.host = kcpHost;
+        _kcpClient.port = kcpPort;
+        _kcpClient.Connect();
+        HideUI();
     }
 
     void HideUI()
     {
-        // Only hide the buttons, not the whole UI object if it contains other things
         if (hostButton != null) hostButton.gameObject.SetActive(false);
         if (clientButton != null) clientButton.gameObject.SetActive(false);
     }

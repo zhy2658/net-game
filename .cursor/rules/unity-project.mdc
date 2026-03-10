@@ -1,0 +1,38 @@
+---
+description: Unity C# coding conventions and project structure for the 3dtest project
+globs: ["Assets/Scripts/**/*.cs", "Assets/Editor/**/*.cs"]
+alwaysApply: false
+---
+
+# Unity Project Conventions
+
+## Runtime
+- Unity 6 (6000.x) with URP 17.3.0
+- New Input System (`com.unity.inputsystem` 1.18.0) — never use legacy `Input.GetKey` in new code
+- KCP is the **primary** network transport (connects to Go server via `NanoKcpClient`)
+- Netcode for GameObjects package is installed but **not used** at runtime — do not inherit `NetworkBehaviour`
+
+## Coding Standards
+- One class per file, filename matches class name
+- No namespace for gameplay scripts (global namespace matches Unity convention for small projects)
+- Use `[SerializeField]` for inspector-exposed private fields; avoid public fields except for quick prototyping
+- Shared utilities go in `AnimatorUtils` / `GameConstants` static classes
+- Magic numbers belong in `GameConstants.cs`
+
+## Component Patterns
+- Local player: `SimpleThirdPersonController` (MonoBehaviour) — handles input, movement, animation, and KCP sync
+- Remote player: `RemotePlayerController` — interpolates server-pushed position/rotation
+- Network: `NanoKcpClient` → `NetworkPlayerManager` routes push messages to spawn/update remote players
+- Enemy: `EnemyAI` supports both `isLocalAuthority` (local AI) and remote sync via `ApplyNetworkState()`
+
+## Key Files
+- `GameConstants.cs` — spawn position, speeds, sync interval, network defaults
+- `AnimatorUtils.cs` — shared animator parameter check
+- `NanoKcpClient.cs` — KCP client with auto-reconnect and reqId-based response callbacks
+- `NightmareSceneSetup.cs` (Editor) — one-click scene setup tool under `TraeTools` menu
+
+## Debug Keys (Editor/DevBuild only, wrapped in `#if DEVELOPMENT_BUILD || UNITY_EDITOR`)
+- `K` — fly up (SimpleThirdPersonController)
+- `J` — force attack (PlayerAttack)
+- `8` — play Dead animation
+- `9` — play Dance animation

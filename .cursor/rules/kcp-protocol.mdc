@@ -1,0 +1,60 @@
+---
+description: KCP/Pitaya protocol format and message routing rules
+globs: ["Assets/Scripts/NanoKcpClient.cs", "Assets/Scripts/NetworkPlayerManager.cs", "Assets/Scripts/Protocol/**"]
+alwaysApply: false
+---
+
+# KCP Protocol & Message Routing
+
+## Transport
+- UDP via KCP library (`Plugins/kcp/KCP/`)
+- Default server: `127.0.0.1:3250` (Go kcp-server)
+- Framing: `[Type(1) | BodyLen(3) | Body(N)]`
+
+## Packet Types
+| Type | Name           | Direction      |
+|------|----------------|----------------|
+| 1    | Handshake      | Both           |
+| 2    | HandshakeAck   | Client→Server  |
+| 3    | Heartbeat      | Both (every 5s)|
+| 4    | Data           | Both           |
+| 5    | Kick           | Server→Client  |
+
+## Data Message Format (Pitaya/Pomelo)
+Flag byte encodes message type: `msgType = (flag >> 1) & 0x07`
+
+| msgType | Name     | Format                                           |
+|---------|----------|--------------------------------------------------|
+| 0       | Request  | `[Flag(1)] [ReqID(VarInt)] [RouteLen(1)] [Route] [Body]` |
+| 1       | Notify   | `[Flag(0x02)] [RouteLen(1)] [Route] [Body]`      |
+| 2       | Response | `[Flag(1)] [ReqID(VarInt)] [Body]`               |
+| 3       | Push     | `[Flag(1)] [RouteLen(1)] [Route] [Body]`         |
+
+## Routes
+
+### Client → Server
+| Route          | Proto Message  | Type    | Purpose         |
+|----------------|---------------|---------|-----------------|
+| `room.join`    | JoinRequest   | Request | Join a room     |
+| `room.move`    | MoveRequest   | Notify  | Sync position   |
+| `room.message` | ChatMessage   | Request | Send chat       |
+
+### Server → Client (Push)
+| Route              | Proto Message    | Purpose                   |
+|--------------------|-----------------|---------------------------|
+| `OnSelfJoin`       | PlayerState     | Confirm join, get own ID  |
+| `OnPlayerMove`     | PlayerMovePush  | Other player moved        |
+| `OnPlayerJoin`     | PlayerJoinPush  | Player entered room       |
+| `OnPlayerLeave`    | PlayerLeavePush | Player left room          |
+| `OnPlayerEnterAOI` | PlayerState     | Player entered view range |
+| `OnPlayerLeaveAOI` | PlayerLeavePush | Player left view range    |
+
+## Proto Source
+Single source of truth: `kcp-server/protocol/game.proto`
+Generated C# code: `Assets/Scripts/Protocol/Game.cs`
+
+## Adding New Messages
+1. Edit `kcp-server/protocol/game.proto`
+2. Run `make proto` in kcp-server (generates both Go and C#)
+3. Register handler: `kcpClient.RegisterHandler("RouteName", data => { ... })`
+4. For requests with expected responses, use: `kcpClient.SendRequest("route", msg, responseBytes => { ... })`

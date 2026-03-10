@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TestKcpClient")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+136a78e889403ce001a92a66307d7c51d634b1d2")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+89a2e9d1d81044b31487d085ff43234972d40710")]
 [assembly: System.Reflection.AssemblyProductAttribute("TestKcpClient")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TestKcpClient")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
