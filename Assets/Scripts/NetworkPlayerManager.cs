@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Protocol;
-using Google.Protobuf;
 
 public class NetworkPlayerManager : MonoBehaviour
 {
@@ -13,11 +12,20 @@ public class NetworkPlayerManager : MonoBehaviour
     public string playerName = "UnityPlayer";
     public bool autoJoinOnConnect = true;
 
-    private Dictionary<string, RemotePlayerController> _remotePlayers = new Dictionary<string, RemotePlayerController>();
-    private bool _hasJoined = false;
+    private Dictionary<string, RemotePlayerController> _remotePlayers = new();
+    private bool _hasJoined;
+    private RuntimeAnimatorController _animCtrl;
 
     void Start()
     {
+        var localPlayer = FindFirstObjectByType<SimpleThirdPersonController>();
+        if (localPlayer != null)
+        {
+            var localAnim = localPlayer.GetComponent<Animator>();
+            if (localAnim != null)
+                _animCtrl = localAnim.runtimeAnimatorController;
+        }
+
         InitializeNetwork();
     }
 
@@ -36,8 +44,6 @@ public class NetworkPlayerManager : MonoBehaviour
             kcpClient.RegisterHandler("OnPlayerLeave", OnPlayerLeave);
             kcpClient.RegisterHandler("OnPlayerEnterAOI", OnPlayerEnterAOI);
             kcpClient.RegisterHandler("OnPlayerLeaveAOI", OnPlayerLeaveAOI);
-
-            Debug.Log($"[NET] NetworkPlayerManager initialized. Handlers registered.");
         }
         else
         {
@@ -61,12 +67,8 @@ public class NetworkPlayerManager : MonoBehaviour
 
     private void OnConnected()
     {
-        Debug.Log("[NET] KCP Connected.");
         if (autoJoinOnConnect && !_hasJoined)
-        {
-            Debug.Log($"[NET] Auto-joining room: {roomId}");
             kcpClient.JoinRoom(roomId, playerName);
-        }
     }
 
     private void OnSelfJoin(byte[] data)
@@ -76,12 +78,9 @@ public class NetworkPlayerManager : MonoBehaviour
             var msg = PlayerState.Parser.ParseFrom(data);
             myPlayerId = msg.Id;
             _hasJoined = true;
-            Debug.Log($"[NET] Joined! My Player ID: {myPlayerId}");
+            Debug.Log($"[NET] Joined as player {myPlayerId}");
         }
-        catch (Exception e)
-        {
-            Debug.LogError($"[NET] Error parsing OnSelfJoin: {e}");
-        }
+        catch (Exception e) { Debug.LogError($"[NET] OnSelfJoin error: {e.Message}"); }
     }
 
     private void OnPlayerMove(byte[] data)
@@ -89,23 +88,14 @@ public class NetworkPlayerManager : MonoBehaviour
         try
         {
             var msg = PlayerMovePush.Parser.ParseFrom(data);
-
             if (msg.Id == myPlayerId) return;
 
             if (_remotePlayers.TryGetValue(msg.Id, out var remote))
-            {
-                remote.SetTarget(msg.Position, msg.Rotation);
-            }
+                remote.SetTarget(msg.Position, msg.Rotation, msg.Speed, msg.IsGrounded);
             else
-            {
-                Debug.Log($"[NET] Move from unknown player {msg.Id}, spawning...");
                 SpawnPlayer(msg.Id, msg.Position, msg.Rotation);
-            }
         }
-        catch (Exception e)
-        {
-            Debug.LogError($"[NET] Error parsing OnPlayerMove: {e}");
-        }
+        catch (Exception e) { Debug.LogError($"[NET] OnPlayerMove error: {e.Message}"); }
     }
 
     private void OnPlayerJoin(byte[] data)
@@ -115,10 +105,7 @@ public class NetworkPlayerManager : MonoBehaviour
             var msg = PlayerJoinPush.Parser.ParseFrom(data);
             Debug.Log($"[NET] Player joined: {msg.Id} ({msg.Name})");
         }
-        catch (Exception e)
-        {
-            Debug.LogError($"[NET] Error parsing OnPlayerJoin: {e}");
-        }
+        catch (Exception e) { Debug.LogError($"[NET] OnPlayerJoin error: {e.Message}"); }
     }
 
     private void OnPlayerEnterAOI(byte[] data)
@@ -126,19 +113,11 @@ public class NetworkPlayerManager : MonoBehaviour
         try
         {
             var msg = PlayerState.Parser.ParseFrom(data);
-            Debug.Log($"[NET] Player entered AOI: {msg.Id} at ({msg.Position?.X}, {msg.Position?.Y}, {msg.Position?.Z})");
-
             if (msg.Id == myPlayerId) return;
-
             if (!_remotePlayers.ContainsKey(msg.Id))
-            {
                 SpawnPlayer(msg.Id, msg.Position, msg.Rotation);
-            }
         }
-        catch (Exception e)
-        {
-            Debug.LogError($"[NET] Error parsing OnPlayerEnterAOI: {e}");
-        }
+        catch (Exception e) { Debug.LogError($"[NET] OnPlayerEnterAOI error: {e.Message}"); }
     }
 
     private void OnPlayerLeave(byte[] data)
@@ -146,13 +125,9 @@ public class NetworkPlayerManager : MonoBehaviour
         try
         {
             var msg = PlayerLeavePush.Parser.ParseFrom(data);
-            Debug.Log($"[NET] Player left: {msg.Id}");
             RemovePlayer(msg.Id);
         }
-        catch (Exception e)
-        {
-            Debug.LogError($"[NET] Error parsing OnPlayerLeave: {e}");
-        }
+        catch (Exception e) { Debug.LogError($"[NET] OnPlayerLeave error: {e.Message}"); }
     }
 
     private void OnPlayerLeaveAOI(byte[] data)
@@ -160,30 +135,22 @@ public class NetworkPlayerManager : MonoBehaviour
         try
         {
             var msg = PlayerLeavePush.Parser.ParseFrom(data);
-            Debug.Log($"[NET] Player left AOI: {msg.Id}");
             RemovePlayer(msg.Id);
         }
-        catch (Exception e)
-        {
-            Debug.LogError($"[NET] Error parsing OnPlayerLeaveAOI: {e}");
-        }
+        catch (Exception e) { Debug.LogError($"[NET] OnPlayerLeaveAOI error: {e.Message}"); }
     }
 
     private void SpawnPlayer(string id, Protocol.Vector3 pos, Protocol.Quaternion rot)
     {
         if (playerPrefab == null)
         {
-            Debug.LogError("[NET] playerPrefab not assigned in NetworkPlayerManager!");
+            Debug.LogError("[NET] playerPrefab not assigned!");
             return;
         }
-
         if (_remotePlayers.ContainsKey(id)) return;
 
-        UnityEngine.Vector3 spawnPos = new UnityEngine.Vector3(
-            pos != null ? pos.X : 0,
-            pos != null ? pos.Y : 0,
-            pos != null ? pos.Z : 0);
-        UnityEngine.Quaternion spawnRot = rot != null
+        var spawnPos = new UnityEngine.Vector3(pos?.X ?? 0, pos?.Y ?? 0, pos?.Z ?? 0);
+        var spawnRot = rot != null
             ? new UnityEngine.Quaternion(rot.X, rot.Y, rot.Z, rot.W)
             : UnityEngine.Quaternion.identity;
 
@@ -199,12 +166,17 @@ public class NetworkPlayerManager : MonoBehaviour
         var cam = go.GetComponentInChildren<Camera>();
         if (cam != null) Destroy(cam.gameObject);
 
+        // Force-assign AnimatorController (prefab variant override is unreliable)
+        var animator = go.GetComponent<Animator>();
+        if (animator != null && _animCtrl != null)
+            animator.runtimeAnimatorController = _animCtrl;
+
         var remote = go.GetComponent<RemotePlayerController>();
         if (remote == null) remote = go.AddComponent<RemotePlayerController>();
         remote.SetTarget(pos, rot);
 
         _remotePlayers.Add(id, remote);
-        Debug.Log($"[NET] Spawned remote player: {id} at {spawnPos}");
+        Debug.Log($"[NET] Spawned remote player: {id}");
     }
 
     private void RemovePlayer(string id)
@@ -214,7 +186,6 @@ public class NetworkPlayerManager : MonoBehaviour
             if (remote != null && remote.gameObject != null)
                 Destroy(remote.gameObject);
             _remotePlayers.Remove(id);
-            Debug.Log($"[NET] Removed remote player: {id}");
         }
     }
 }

@@ -4,7 +4,7 @@ public static class AnimatorUtils
 {
     public static bool HasParameter(string paramName, Animator animator)
     {
-        if (animator == null) return false;
+        if (animator == null || animator.runtimeAnimatorController == null) return false;
         foreach (AnimatorControllerParameter param in animator.parameters)
         {
             if (param.name == paramName) return true;

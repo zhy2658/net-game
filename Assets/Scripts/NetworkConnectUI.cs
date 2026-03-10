@@ -3,20 +3,18 @@ using UnityEngine.UI;
 
 public class NetworkConnectUI : MonoBehaviour
 {
-    [SerializeField] private Button hostButton;
-    [SerializeField] private Button clientButton;
+    [SerializeField] private Button connectButton;
 
     [Header("KCP Connection")]
-    [SerializeField] private string kcpHost = "127.0.0.1";
-    [SerializeField] private int kcpPort = 3250;
-    [SerializeField] private string roomId = "lobby";
+    [SerializeField] private string kcpHost = GameConstants.DefaultHost;
+    [SerializeField] private int kcpPort = GameConstants.DefaultPort;
 
     private NanoKcpClient _kcpClient;
 
     void Awake()
     {
-        if (hostButton == null) hostButton = transform.Find("HostButton")?.GetComponent<Button>();
-        if (clientButton == null) clientButton = transform.Find("ClientButton")?.GetComponent<Button>();
+        if (connectButton == null)
+            connectButton = GetComponentInChildren<Button>();
     }
 
     void Start()
@@ -31,15 +29,8 @@ public class NetworkConnectUI : MonoBehaviour
             _kcpClient = nanoObj.AddComponent<NanoKcpClient>();
         }
 
-        if (hostButton != null)
-        {
-            hostButton.onClick.AddListener(ConnectKcp);
-        }
-
-        if (clientButton != null)
-        {
-            clientButton.onClick.AddListener(ConnectKcp);
-        }
+        if (connectButton != null)
+            connectButton.onClick.AddListener(ConnectKcp);
     }
 
     private void ConnectKcp()
@@ -49,12 +40,8 @@ public class NetworkConnectUI : MonoBehaviour
         _kcpClient.host = kcpHost;
         _kcpClient.port = kcpPort;
         _kcpClient.Connect();
-        HideUI();
-    }
 
-    void HideUI()
-    {
-        if (hostButton != null) hostButton.gameObject.SetActive(false);
-        if (clientButton != null) clientButton.gameObject.SetActive(false);
+        if (connectButton != null)
+            connectButton.gameObject.SetActive(false);
     }
 }

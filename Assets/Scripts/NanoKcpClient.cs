@@ -21,7 +21,7 @@ public class NanoKcpClient : MonoBehaviour
     private UDPSession session;
     private byte[] recvBuffer = new byte[8192];
     private MemoryStream streamBuffer = new MemoryStream();
-    private bool isConnected = false;
+    private bool isConnected;
     private int reqId = 1;
     private float _lastHeartbeatTime;
 
@@ -38,37 +38,20 @@ public class NanoKcpClient : MonoBehaviour
     const int MSG_TYPE_DATA = 4;
     const int MSG_TYPE_KICK = 5;
 
-    public Action<JoinResponse> OnJoinResponse;
-    public Action<ChatMessage> OnChatMessage;
     public Action OnConnected;
     public Action OnDisconnected;
 
-    private Dictionary<string, Action<byte[]>> _routeHandlers = new Dictionary<string, Action<byte[]>>();
-    private Dictionary<int, Action<byte[]>> _responseCallbacks = new Dictionary<int, Action<byte[]>>();
+    private Dictionary<string, Action<byte[]>> _routeHandlers = new();
+    private Dictionary<int, Action<byte[]>> _responseCallbacks = new();
 
-    public void RegisterHandler(string route, Action<byte[]> handler)
-    {
-        _routeHandlers[route] = handler;
-    }
+    public void RegisterHandler(string route, Action<byte[]> handler) => _routeHandlers[route] = handler;
+    public void UnregisterHandler(string route) => _routeHandlers.Remove(route);
 
-    public void UnregisterHandler(string route)
-    {
-        _routeHandlers.Remove(route);
-    }
-
-    void Start()
-    {
-        Connect();
-    }
+    void Start() => Connect();
 
     public void JoinRoom(string roomId = "", string playerName = "UnityPlayer")
     {
-        if (!isConnected)
-        {
-            Debug.LogWarning("[KCP] Cannot join room: not connected yet.");
-            return;
-        }
-        Debug.Log($"[KCP] Sending JoinRoom request: room={roomId}, name={playerName}");
+        if (!isConnected) return;
         SendRequest("room.join", new JoinRequest { RoomId = roomId, Name = playerName });
     }
 
@@ -79,20 +62,18 @@ public class NanoKcpClient : MonoBehaviour
         try
         {
             Disconnect();
-
             session = new UDPSession();
             session.Connect(host, port);
             session.mKCP.NoDelay(1, 10, 2, 1);
             session.mKCP.WndSize(128, 128);
             session.mKCP.SetStreamMode(true);
             session.AckNoDelay = true;
-
-            Debug.Log($"[KCP] Connecting to {host}:{port}...");
+            Debug.Log($"[KCP] Connecting to {host}:{port}");
             SendHandshake();
         }
         catch (Exception e)
         {
-            Debug.LogError($"[KCP] Connect Error: {e.Message}");
+            Debug.LogError($"[KCP] Connect failed: {e.Message}");
             ScheduleReconnect();
         }
     }
@@ -110,7 +91,6 @@ public class NanoKcpClient : MonoBehaviour
             isConnected = false;
             OnDisconnected?.Invoke();
         }
-
         streamBuffer.SetLength(0);
     }
 
@@ -118,15 +98,8 @@ public class NanoKcpClient : MonoBehaviour
     {
         if (session != null)
         {
-            try
-            {
-                session.Update();
-            }
-            catch (Exception)
-            {
-                HandleConnectionLost();
-                return;
-            }
+            try { session.Update(); }
+            catch { HandleConnectionLost(); return; }
 
             if (isConnected && Time.time - _lastHeartbeatTime > 5f)
             {
@@ -150,14 +123,14 @@ public class NanoKcpClient : MonoBehaviour
             }
             catch (Exception e)
             {
-                Debug.LogError($"[KCP] Recv Error: {e.Message}");
+                Debug.LogError($"[KCP] Recv error: {e.Message}");
                 HandleConnectionLost();
             }
         }
         else if (autoReconnect && _wasConnected && Time.time >= _nextReconnectTime && _reconnectAttempts < maxReconnectAttempts)
         {
             _reconnectAttempts++;
-            Debug.Log($"[KCP] Reconnecting (attempt {_reconnectAttempts}/{maxReconnectAttempts})...");
+            Debug.Log($"[KCP] Reconnecting ({_reconnectAttempts}/{maxReconnectAttempts})...");
             Connect();
         }
     }
@@ -166,7 +139,7 @@ public class NanoKcpClient : MonoBehaviour
     {
         if (isConnected)
         {
-            Debug.LogWarning("[KCP] Connection lost.");
+            Debug.LogWarning("[KCP] Connection lost");
             _wasConnected = true;
         }
         Disconnect();
@@ -176,10 +149,8 @@ public class NanoKcpClient : MonoBehaviour
     private void ScheduleReconnect()
     {
         if (!autoReconnect || _reconnectAttempts >= maxReconnectAttempts) return;
-
         float delay = Mathf.Min(reconnectBaseDelay * Mathf.Pow(2, _reconnectAttempts), reconnectMaxDelay);
         _nextReconnectTime = Time.time + delay;
-        Debug.Log($"[KCP] Will retry in {delay:F1}s");
     }
 
     private void ProcessStream()
@@ -191,7 +162,7 @@ public class NanoKcpClient : MonoBehaviour
             byte[] header = new byte[4];
             streamBuffer.Read(header, 0, 4);
             int type = header[0];
-            int bodyLen = ((header[1] << 16) | (header[2] << 8) | header[3]);
+            int bodyLen = (header[1] << 16) | (header[2] << 8) | header[3];
 
             if (length - packetStart < HEADER_LENGTH + bodyLen)
             {
@@ -203,13 +174,11 @@ public class NanoKcpClient : MonoBehaviour
             streamBuffer.Read(body, 0, bodyLen);
 
             try { HandlePacket(type, body); }
-            catch (Exception e) { Debug.LogError($"[KCP] Packet Error: {e}"); }
+            catch (Exception e) { Debug.LogError($"[KCP] Packet error: {e.Message}"); }
         }
 
         if (streamBuffer.Position >= streamBuffer.Length)
-        {
             streamBuffer.SetLength(0);
-        }
         else if (streamBuffer.Position > 4096)
         {
             byte[] rest = new byte[streamBuffer.Length - streamBuffer.Position];
@@ -225,11 +194,11 @@ public class NanoKcpClient : MonoBehaviour
         switch (type)
         {
             case MSG_TYPE_HANDSHAKE:
-                Debug.Log("[KCP] Handshake received.");
                 SendHandshakeAck();
                 isConnected = true;
                 _wasConnected = true;
                 _reconnectAttempts = 0;
+                Debug.Log("[KCP] Connected");
                 OnConnected?.Invoke();
                 break;
             case MSG_TYPE_HEARTBEAT:
@@ -238,7 +207,7 @@ public class NanoKcpClient : MonoBehaviour
                 HandleDataPacket(body);
                 break;
             case MSG_TYPE_KICK:
-                Debug.LogWarning("[KCP] Kicked by server.");
+                Debug.LogWarning("[KCP] Kicked by server");
                 autoReconnect = false;
                 Disconnect();
                 break;
@@ -248,34 +217,17 @@ public class NanoKcpClient : MonoBehaviour
     private void HandleDataPacket(byte[] body)
     {
         if (body.Length < 1) return;
+        int msgType = (body[0] >> 1) & 0x07;
 
-        byte flag = body[0];
-        int msgType = (flag >> 1) & 0x07;
-
-        if (msgType == 3) // Push
-        {
-            HandlePushMessage(body);
-            return;
-        }
-
-        if (msgType == 2) // Response
-        {
-            HandleResponseMessage(body);
-            return;
-        }
-
-        // Fallback: try legacy parsing
-        HandleLegacyResponse(body);
+        if (msgType == 3) { HandlePushMessage(body); return; }
+        if (msgType == 2) { HandleResponseMessage(body); return; }
     }
 
     private void HandlePushMessage(byte[] body)
     {
         int offset = 1;
         if (offset >= body.Length) return;
-
-        int routeLen = body[offset];
-        offset++;
-
+        int routeLen = body[offset++];
         if (offset + routeLen > body.Length) return;
 
         string route = Encoding.UTF8.GetString(body, offset, routeLen);
@@ -287,11 +239,7 @@ public class NanoKcpClient : MonoBehaviour
         if (_routeHandlers.TryGetValue(route, out var handler))
         {
             try { handler?.Invoke(msgBody); }
-            catch (Exception e) { Debug.LogError($"[KCP] Error handling route {route}: {e}"); }
-        }
-        else
-        {
-            Debug.LogWarning($"[KCP] No handler for route: {route}");
+            catch (Exception e) { Debug.LogError($"[KCP] Handler error ({route}): {e.Message}"); }
         }
     }
 
@@ -299,7 +247,6 @@ public class NanoKcpClient : MonoBehaviour
     {
         int offset = 1;
         int id = ReadVarInt(body, ref offset);
-
         if (offset >= body.Length) return;
 
         byte[] respBody = new byte[body.Length - offset];
@@ -309,51 +256,13 @@ public class NanoKcpClient : MonoBehaviour
         {
             _responseCallbacks.Remove(id);
             try { callback?.Invoke(respBody); }
-            catch (Exception e) { Debug.LogError($"[KCP] Response callback error (reqId={id}): {e}"); }
+            catch (Exception e) { Debug.LogError($"[KCP] Response callback error (id={id}): {e.Message}"); }
         }
-        else
-        {
-            HandleLegacyResponse(body);
-        }
-    }
-
-    private void HandleLegacyResponse(byte[] body)
-    {
-        int offset = 1;
-        while (offset < body.Length && (body[offset] & 0x80) != 0) offset++;
-        offset++;
-
-        if (offset >= body.Length) return;
-
-        byte[] respBody = new byte[body.Length - offset];
-        Array.Copy(body, offset, respBody, 0, respBody.Length);
-
-        try
-        {
-            var joinRes = JoinResponse.Parser.ParseFrom(respBody);
-            if (!string.IsNullOrEmpty(joinRes.RoomId) || joinRes.Code != 0)
-            {
-                OnJoinResponse?.Invoke(joinRes);
-                return;
-            }
-        }
-        catch { }
-
-        try
-        {
-            var chatMsg = ChatMessage.Parser.ParseFrom(respBody);
-            if (!string.IsNullOrEmpty(chatMsg.Content))
-            {
-                OnChatMessage?.Invoke(chatMsg);
-            }
-        }
-        catch { }
     }
 
     private int ReadVarInt(byte[] data, ref int offset)
     {
-        int result = 0;
-        int shift = 0;
+        int result = 0, shift = 0;
         while (offset < data.Length)
         {
             byte b = data[offset++];
@@ -370,49 +279,39 @@ public class NanoKcpClient : MonoBehaviour
         SendRaw(MSG_TYPE_HANDSHAKE, Encoding.UTF8.GetBytes(json));
     }
 
-    private void SendHandshakeAck()
-    {
-        SendRaw(MSG_TYPE_HANDSHAKE_ACK, new byte[0]);
-    }
+    private void SendHandshakeAck() => SendRaw(MSG_TYPE_HANDSHAKE_ACK, new byte[0]);
 
     public void SendRequest(string route, IMessage message, Action<byte[]> callback = null)
     {
-        using (var ms = new MemoryStream())
-        {
-            ms.WriteByte(0x00); // Request
+        using var ms = new MemoryStream();
+        ms.WriteByte(0x00);
 
-            int currentReqId = reqId++;
-            WriteVarInt(ms, currentReqId);
+        int currentReqId = reqId++;
+        WriteVarInt(ms, currentReqId);
 
-            byte[] routeBytes = Encoding.UTF8.GetBytes(route);
-            ms.WriteByte((byte)routeBytes.Length);
-            ms.Write(routeBytes, 0, routeBytes.Length);
+        byte[] routeBytes = Encoding.UTF8.GetBytes(route);
+        ms.WriteByte((byte)routeBytes.Length);
+        ms.Write(routeBytes, 0, routeBytes.Length);
 
-            message.WriteTo(ms);
+        message.WriteTo(ms);
 
-            if (callback != null)
-            {
-                _responseCallbacks[currentReqId] = callback;
-            }
+        if (callback != null)
+            _responseCallbacks[currentReqId] = callback;
 
-            SendRaw(MSG_TYPE_DATA, ms.ToArray());
-        }
+        SendRaw(MSG_TYPE_DATA, ms.ToArray());
     }
 
     public void SendNotify(string route, IMessage message)
     {
-        using (var ms = new MemoryStream())
-        {
-            ms.WriteByte(0x02); // Notify
+        using var ms = new MemoryStream();
+        ms.WriteByte(0x02);
 
-            byte[] routeBytes = Encoding.UTF8.GetBytes(route);
-            ms.WriteByte((byte)routeBytes.Length);
-            ms.Write(routeBytes, 0, routeBytes.Length);
+        byte[] routeBytes = Encoding.UTF8.GetBytes(route);
+        ms.WriteByte((byte)routeBytes.Length);
+        ms.Write(routeBytes, 0, routeBytes.Length);
 
-            message.WriteTo(ms);
-
-            SendRaw(MSG_TYPE_DATA, ms.ToArray());
-        }
+        message.WriteTo(ms);
+        SendRaw(MSG_TYPE_DATA, ms.ToArray());
     }
 
     private void WriteVarInt(Stream stream, int value)
@@ -430,13 +329,11 @@ public class NanoKcpClient : MonoBehaviour
     {
         if (session == null) return;
         int len = body.Length;
-        byte[] header = new byte[4];
-        header[0] = (byte)type;
-        header[1] = (byte)((len >> 16) & 0xFF);
-        header[2] = (byte)((len >> 8) & 0xFF);
-        header[3] = (byte)(len & 0xFF);
         byte[] packet = new byte[4 + len];
-        Array.Copy(header, 0, packet, 0, 4);
+        packet[0] = (byte)type;
+        packet[1] = (byte)((len >> 16) & 0xFF);
+        packet[2] = (byte)((len >> 8) & 0xFF);
+        packet[3] = (byte)(len & 0xFF);
         Array.Copy(body, 0, packet, 4, len);
         session.Send(packet, 0, packet.Length);
     }
