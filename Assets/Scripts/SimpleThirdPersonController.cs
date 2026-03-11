@@ -24,6 +24,7 @@ public class SimpleThirdPersonController : MonoBehaviour
     private InputAction moveAction;
     private InputAction runAction;
     private InputAction jumpAction;
+    private InputAction attackAction;
 
     private float _verticalVelocity;
     private float _currentSpeed;
@@ -62,6 +63,9 @@ public class SimpleThirdPersonController : MonoBehaviour
 
         jumpAction = inputMap.AddAction("Jump", binding: "<Keyboard>/space");
         jumpAction.AddBinding("<Gamepad>/buttonSouth");
+
+        attackAction = inputMap.AddAction("Attack", binding: "<Mouse>/leftButton");
+        attackAction.AddBinding("<Gamepad>/buttonWest");
     }
 
     void Start()
@@ -153,6 +157,11 @@ public class SimpleThirdPersonController : MonoBehaviour
         if (_characterController != null && _characterController.enabled)
             _characterController.Move(move * Time.deltaTime);
 
+        if (attackAction != null && attackAction.WasPressedThisFrame())
+        {
+            CastSkill(1001);
+        }
+
         SyncToServer();
 
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
@@ -166,6 +175,7 @@ public class SimpleThirdPersonController : MonoBehaviour
         if (Time.time - _lastSyncTime < GameConstants.SyncInterval) return;
 
         _lastSyncTime = Time.time;
+        // Use full namespace to avoid conflicts if any
         _kcpClient.SendNotify("room.move", new Protocol.MoveRequest
         {
             Position = new Protocol.Vector3 { X = transform.position.x, Y = transform.position.y, Z = transform.position.z },
@@ -174,6 +184,23 @@ public class SimpleThirdPersonController : MonoBehaviour
             IsGrounded = _isGrounded,
             ClientTimestamp = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         });
+    }
+
+    private void CastSkill(int skillId)
+    {
+        if (_animator != null) _animator.SetTrigger("Attack");
+        if (_kcpClient == null || !_kcpClient.IsConnected) return;
+
+        var req = new Protocol.CastSkillRequest
+        {
+            SkillInfo = new Protocol.SkillInfo
+            {
+                SkillId = skillId,
+                Timestamp = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                Direction = new Protocol.Vector3 { X = transform.forward.x, Y = transform.forward.y, Z = transform.forward.z }
+            }
+        };
+        _kcpClient.SendRequest("room.castSkill", req);
     }
 
     private void GroundCheck()
