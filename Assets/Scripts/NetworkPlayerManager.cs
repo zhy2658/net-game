@@ -176,7 +176,7 @@ public class NetworkPlayerManager : MonoBehaviour
         remote.SetTarget(pos, rot);
 
         _remotePlayers.Add(id, remote);
-        Debug.Log($"[NET] Spawned remote player: {id}");
+        // Debug.Log($"[NET] Spawned remote player: {id}");
     }
 
     private void RemovePlayer(string id)

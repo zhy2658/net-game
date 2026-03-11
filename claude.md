@@ -224,3 +224,17 @@ kcpClient.RegisterHandler("OnNewPush", (data) => {
 - NetworkPlayer prefab variant 的 AnimatorController 在实例化后可能丢失，`NetworkPlayerManager` 通过 force-assign 本地玩家的 controller 解决
 - `Time.timeScale` 可能被 GameMenu 暂停设为 0，控制器在 Start 中自动恢复
 - 远程玩家需销毁 AudioListener 和 Camera 避免冲突
+
+---
+
+## 工具使用规范
+
+- 操作 Unity 场景、GameObject、组件、动画、材质、NavMesh 等时，**优先使用 Unity MCP 工具**，而非手动编辑场景文件或编写临时脚本
+- 创建/删除 GameObject、修改组件属性、搜索场景对象 → 用 `manage_gameobject`、`manage_components`、`find_gameobjects`
+- 动画控制器创建、参数添加、状态/转换配置 → 用 `manage_animation`
+- 资源搜索、创建、移动 → 用 `manage_asset`
+- 脚本创建和结构化编辑 → 用 `create_script`、`script_apply_edits`
+- NavMesh 烘焙、光照烘焙、后处理 → 用 `manage_graphics` 或编写 Editor 脚本通过 `execute_menu_item` 执行
+- 运行/停止 Play Mode → 用 `manage_editor`
+- 检查编译错误和运行日志 → 用 `read_console`
+- 批量操作 → 用 `batch_execute` 减少往返次数

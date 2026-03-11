@@ -6,7 +6,7 @@ public class SimpleThirdPersonController : MonoBehaviour
 {
     public float moveSpeed = 5f;
     public float runSpeed = 8f;
-    public float rotationSpeed = 0.12f;
+    public float rotationSpeed = 0.1f;
     public float speedSmoothTime = 0.1f;
     public float gravity = 20f;
     public float jumpForce = 1.5f;
@@ -19,6 +19,7 @@ public class SimpleThirdPersonController : MonoBehaviour
     private CharacterController _characterController;
     private Animator _animator;
     private Transform _cameraTransform;
+    private ThirdPersonCamera _cameraScript;
 
     private InputActionMap inputMap;
     private InputAction moveAction;
@@ -42,7 +43,11 @@ public class SimpleThirdPersonController : MonoBehaviour
         _animator = GetComponent<Animator>();
         if (_animator != null) _animator.applyRootMotion = false;
 
-        if (Camera.main != null) _cameraTransform = Camera.main.transform;
+        _cameraScript = FindFirstObjectByType<ThirdPersonCamera>();
+        if (_cameraScript != null)
+            _cameraTransform = _cameraScript.transform;
+        else if (Camera.main != null)
+            _cameraTransform = Camera.main.transform;
         _kcpClient = FindFirstObjectByType<NanoKcpClient>();
 
         inputMap = new InputActionMap("ThirdPersonController");
@@ -73,8 +78,8 @@ public class SimpleThirdPersonController : MonoBehaviour
         if (Time.timeScale == 0) Time.timeScale = 1f;
         if (_kcpClient == null) _kcpClient = FindFirstObjectByType<NanoKcpClient>();
 
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
 
         inputMap.Enable();
 
@@ -82,7 +87,11 @@ public class SimpleThirdPersonController : MonoBehaviour
         transform.position = GameConstants.SafeSpawnPos;
         if (_characterController != null) _characterController.enabled = true;
 
-        if (Camera.main != null)
+        if (_cameraScript != null)
+        {
+            _cameraScript.target = transform;
+        }
+        else if (Camera.main != null)
         {
             var camScript = Camera.main.GetComponent<ThirdPersonCamera>();
             if (camScript != null) camScript.target = transform;
@@ -95,12 +104,26 @@ public class SimpleThirdPersonController : MonoBehaviour
 
     void Update()
     {
-        if (_cameraTransform == null && Camera.main != null)
+        if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
         {
-            _cameraTransform = Camera.main.transform;
-            var camScript = Camera.main.GetComponent<ThirdPersonCamera>();
-            if (camScript != null && camScript.target == null)
-                camScript.target = transform;
+            bool locked = Cursor.lockState == CursorLockMode.Locked;
+            Cursor.lockState = locked ? CursorLockMode.None : CursorLockMode.Locked;
+            Cursor.visible = locked;
+        }
+
+        if (_cameraScript == null)
+        {
+            _cameraScript = FindFirstObjectByType<ThirdPersonCamera>();
+            if (_cameraScript != null)
+            {
+                _cameraTransform = _cameraScript.transform;
+                if (_cameraScript.target == null)
+                    _cameraScript.target = transform;
+            }
+            else if (_cameraTransform == null && Camera.main != null)
+            {
+                _cameraTransform = Camera.main.transform;
+            }
         }
 
         GroundCheck();
@@ -109,25 +132,26 @@ public class SimpleThirdPersonController : MonoBehaviour
         bool isRunning = runAction?.IsPressed() ?? false;
         bool jumpPressed = jumpAction?.WasPressedThisFrame() ?? false;
 
-        float targetSpeed = moveInput.magnitude > 0.1f ? (isRunning ? runSpeed : moveSpeed) : 0f;
+        float inputMag = moveInput.magnitude;
+        float targetSpeed = inputMag > 0.1f ? (isRunning ? runSpeed : moveSpeed) : 0f;
         _currentSpeed = Mathf.SmoothDamp(_currentSpeed, targetSpeed, ref _speedVelocity, speedSmoothTime);
 
         Vector3 move = Vector3.zero;
-        if (moveInput.sqrMagnitude >= 0.01f && _cameraTransform != null)
+        if (inputMag > 0.1f && _cameraTransform != null)
         {
-            Vector3 camForward = Vector3.Scale(_cameraTransform.forward, new Vector3(1, 0, 1)).normalized;
-            Vector3 camRight = Vector3.Scale(_cameraTransform.right, new Vector3(1, 0, 1)).normalized;
+            float camYaw = _cameraScript != null ? _cameraScript.Yaw : _cameraTransform.eulerAngles.y;
+            Vector3 camForward = Quaternion.Euler(0f, camYaw, 0f) * Vector3.forward;
+            Vector3 camRight = Quaternion.Euler(0f, camYaw, 0f) * Vector3.right;
             Vector3 direction = (camForward * moveInput.y + camRight * moveInput.x).normalized;
 
-            if (direction != Vector3.zero)
+            if (direction.sqrMagnitude > 0.001f)
             {
                 _targetRotation = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
                 float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, _targetRotation, ref _rotationVelocity, rotationSpeed);
                 transform.rotation = Quaternion.Euler(0f, angle, 0f);
-                move = Quaternion.Euler(0f, _targetRotation, 0f) * Vector3.forward;
+                move = direction * _currentSpeed;
             }
         }
-        move = move.normalized * _currentSpeed;
 
         if (_animator != null && _animator.runtimeAnimatorController != null)
         {
@@ -175,7 +199,6 @@ public class SimpleThirdPersonController : MonoBehaviour
         if (Time.time - _lastSyncTime < GameConstants.SyncInterval) return;
 
         _lastSyncTime = Time.time;
-        // Use full namespace to avoid conflicts if any
         _kcpClient.SendNotify("room.move", new Protocol.MoveRequest
         {
             Position = new Protocol.Vector3 { X = transform.position.x, Y = transform.position.y, Z = transform.position.z },
